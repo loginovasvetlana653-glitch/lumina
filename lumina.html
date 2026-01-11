@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lumina Notes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Montserrat:wght@400;700;900&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { -webkit-tap-highlight-color: transparent; user-select: none; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        [contenteditable]:empty:before { content: "Начните писать здесь..."; opacity: 0.15; font-style: italic; }
+        .note-content-preview * { pointer-events: none; }
+        
+        /* Анимации */
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        .slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        /* Темы */
+        body.theme-light { --bg: #F8FAFC; --card: #ffffff; --text: #1E293B; --sub: #64748B; --accent: #4F46E5; --border: #E2E8F0; --secondary: #EEF2FF; }
+        body.theme-dark { --bg: #0F172A; --card: #1E293B; --text: #F1F5F9; --sub: #94A3B8; --accent: #818CF8; --border: #334155; --secondary: #334155; }
+        body.theme-oled { --bg: #000000; --card: #121212; --text: #f4f4f5; --sub: #71717a; --accent: #3b82f6; --border: #27272a; --secondary: #18181b; }
+        body.theme-cyberpunk { --bg: #0D0221; --card: #1A0B3B; --text: #00FF9F; --sub: #00FF9F99; --accent: #FF0055; --border: #FF005533; --secondary: #2D1456; }
+
+        body { background-color: var(--bg); color: var(--text); transition: background-color 0.3s, color 0.3s; }
+        .app-card { background-color: var(--card); border: 1px solid var(--border); }
+        .app-text-sub { color: var(--sub); }
+        .app-accent { color: var(--accent); }
+        .app-button { background-color: var(--accent); color: white; }
+        .app-secondary { background-color: var(--secondary); }
+    </style>
+</head>
+<body class="theme-dark font-sans overflow-hidden h-screen w-screen">
+
+    <div id="app" class="h-full flex flex-col">
+        <!-- СПИСОК (Главный экран) -->
+        <div id="view-list" class="flex flex-col h-full fade-in">
+            <header class="px-4 pt-6 pb-4">
+                <div class="flex items-center gap-3 px-5 py-3.5 rounded-3xl app-card shadow-lg shadow-black/5">
+                    <button onclick="toggleDrawer(true)" class="active:scale-90 transition-transform">
+                        <i data-lucide="menu" class="app-accent w-6 h-6"></i>
+                    </button>
+                    <input type="text" id="search-input" placeholder="Поиск..." class="bg-transparent border-none outline-none flex-1 font-bold placeholder:opacity-20">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-black text-xs">L</div>
+                </div>
+            </header>
+
+            <main id="items-container" class="flex-1 overflow-y-auto px-4 pb-24 space-y-4 no-scrollbar">
+                <!-- Здесь будут заметки/задачи -->
+            </main>
+
+            <button onclick="createNewNote()" id="fab" class="fixed bottom-8 right-8 w-16 h-16 rounded-[24px] shadow-2xl flex items-center justify-center active:scale-90 active:rotate-45 transition-all app-button">
+                <i data-lucide="plus" class="w-8 h-8"></i>
+            </button>
+        </div>
+
+        <!-- РЕДАКТОР -->
+        <div id="view-editor" class="hidden flex-col h-full fade-in">
+            <header class="flex items-center justify-between px-3 py-4 border-b border-[var(--border)]">
+                <button onclick="closeEditor()" class="p-3 active:bg-black/10 rounded-2xl transition-colors">
+                    <i data-lucide="chevron-left" class="w-7 h-7"></i>
+                </button>
+                <button onclick="closeEditor()" class="p-3 text-green-500 font-black text-xs uppercase px-5">Готово</button>
+            </header>
+            <main class="flex-1 overflow-y-auto p-8 flex flex-col">
+                <input type="text" id="editor-title" class="w-full text-4xl font-black bg-transparent border-none outline-none mb-6 placeholder:opacity-10 tracking-tight" placeholder="Заголовок...">
+                <div id="editor-content" contenteditable class="flex-1 outline-none text-xl leading-relaxed max-w-none min-h-[50vh]"></div>
+            </main>
+        </div>
+    </div>
+
+    <!-- САЙДБАР -->
+    <div id="drawer-overlay" class="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300" onclick="toggleDrawer(false)"></div>
+    <aside id="drawer" class="fixed left-0 top-0 bottom-0 w-[280px] app-card z-[101] shadow-2xl -translate-x-full transition-transform duration-500 p-6 flex flex-col">
+        <div class="flex items-center gap-3 mb-10">
+            <div class="p-2.5 rounded-2xl app-button"><i data-lucide="zap" class="w-6 h-6 fill-current"></i></div>
+            <span id="app-logo" class="font-black text-2xl tracking-tighter uppercase">LUMINA</span>
+        </div>
+
+        <nav class="flex-1 space-y-2">
+            <button onclick="switchTab('notes')" class="w-full p-4 rounded-2xl flex items-center gap-4 font-bold transition-all app-secondary app-accent" id="nav-notes">
+                <i data-lucide="file-text" class="w-5 h-5"></i> Заметки
+            </button>
+            <button onclick="switchTab('tasks')" class="w-full p-4 rounded-2xl flex items-center gap-4 font-bold transition-all opacity-50" id="nav-tasks">
+                <i data-lucide="check-square" class="w-5 h-5"></i> Задачи
+            </button>
+            <button onclick="toggleProModal(true)" id="pro-btn" class="w-full p-4 rounded-2xl flex items-center justify-between font-bold transition-all mt-6 text-amber-500 bg-amber-500/10 border border-amber-500/20">
+                <div class="flex items-center gap-3"><i data-lucide="crown" class="w-5 h-5"></i> Получить Pro</div>
+                <i data-lucide="zap" class="w-4 h-4 animate-pulse"></i>
+            </button>
+            <div id="pro-status" class="hidden w-full p-4 rounded-2xl items-center gap-3 font-bold mt-6 text-amber-500 bg-amber-500/5">
+                <i data-lucide="crown" class="w-5 h-5"></i> Pro активен
+            </div>
+        </nav>
+
+        <div class="mt-auto grid grid-cols-2 gap-2">
+            <button onclick="setTheme('light')" class="h-10 rounded-xl text-[10px] font-black border-2 border-transparent bg-black/5">Светлая</button>
+            <button onclick="setTheme('dark')" class="h-10 rounded-xl text-[10px] font-black border-2 border-transparent bg-black/5">Темная</button>
+            <button onclick="tryTheme('oled')" id="theme-oled" class="h-10 rounded-xl text-[10px] font-black border-2 border-transparent bg-black/5 flex items-center justify-center gap-1 opacity-30">OLED <i data-lucide="crown" class="w-3 h-3"></i></button>
+            <button onclick="tryTheme('cyberpunk')" id="theme-cyberpunk" class="h-10 rounded-xl text-[10px] font-black border-2 border-transparent bg-black/5 flex items-center justify-center gap-1 opacity-30">CYBER <i data-lucide="crown" class="w-3 h-3"></i></button>
+        </div>
+    </aside>
+
+    <!-- МОДАЛКА PRO -->
+    <div id="pro-modal" class="fixed inset-0 z-[300] hidden items-center justify-center p-6">
+        <div class="absolute inset-0 bg-black/90 backdrop-blur-md" onclick="toggleProModal(false)"></div>
+        <div class="relative w-full max-w-[340px] app-card rounded-[48px] p-10 text-center slide-up">
+            <div class="flex justify-center mb-8">
+                <div class="w-24 h-24 bg-gradient-to-br from-amber-400 to-orange-600 rounded-[32px] flex items-center justify-center shadow-2xl rotate-12">
+                    <i data-lucide="crown" class="w-12 h-12 text-white"></i>
+                </div>
+            </div>
+            <h3 class="text-3xl font-black mb-2 tracking-tighter uppercase">LUMINA PRO</h3>
+            <div class="mb-8">
+                <span class="text-4xl font-black text-amber-500">FREE</span>
+                <p class="text-xs font-black uppercase opacity-30 mt-2 tracking-[0.2em]">За вступление в канал</p>
+            </div>
+            <div class="space-y-3">
+                <a href="https://t.me/femboy_cllub" target="_blank" onclick="activatePro()" class="w-full py-5 rounded-3xl bg-[#0088cc] text-white font-black flex items-center justify-center gap-3 shadow-xl">
+                    <i data-lucide="send" class="w-5 h-5"></i> МОЙ TG
+                </a>
+                <button onclick="toggleProModal(false)" class="w-full py-5 rounded-3xl app-secondary font-black">ПОЗЖЕ</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Состояние
+        let notes = JSON.parse(localStorage.getItem('lumina_notes')) || [];
+        let tasks = JSON.parse(localStorage.getItem('lumina_tasks')) || [];
+        let isPro = localStorage.getItem('lumina_is_pro') === 'true';
+        let currentTab = 'notes';
+        let activeNoteId = null;
+
+        // Инициализация
+        function init() {
+            lucide.createIcons();
+            if (isPro) applyProStyles();
+            render();
+            
+            // Живой поиск
+            document.getElementById('search-input').addEventListener('input', render);
+        }
+
+        function applyProStyles() {
+            document.getElementById('app-logo').innerText = "LUMINA PRO";
+            document.getElementById('pro-btn').classList.add('hidden');
+            document.getElementById('pro-status').classList.remove('hidden');
+            document.getElementById('pro-status').classList.add('flex');
+            document.getElementById('theme-oled').classList.remove('opacity-30');
+            document.getElementById('theme-cyberpunk').classList.remove('opacity-30');
+            document.querySelectorAll('#theme-oled lucide, #theme-cyberpunk lucide').forEach(el => el.remove());
+        }
+
+        function activatePro() {
+            isPro = true;
+            localStorage.setItem('lumina_is_pro', 'true');
+            applyProStyles();
+            toggleProModal(false);
+            if (window.navigator.vibrate) window.navigator.vibrate([100, 50, 100]);
+        }
+
+        function render() {
+            const container = document.getElementById('items-container');
+            const search = document.getElementById('search-input').value.toLowerCase();
+            container.innerHTML = '';
+
+            if (currentTab === 'notes') {
+                document.getElementById('fab').classList.remove('hidden');
+                notes.filter(n => n.title.toLowerCase().includes(search) || n.content.toLowerCase().includes(search))
+                     .forEach(note => {
+                        const div = document.createElement('div');
+                        div.className = 'app-card p-6 rounded-[32px] shadow-sm flex flex-col gap-2 active:scale-[0.97] transition-all';
+                        div.onclick = () => openEditor(note.id);
+                        div.innerHTML = `
+                            <h3 class="font-black text-xl">${note.title || 'Без названия'}</h3>
+                            <div class="app-text-sub text-sm line-clamp-3 note-content-preview">${note.content || 'Пусто...'}</div>
+                            <div class="flex justify-between items-center mt-2">
+                                <span class="text-[10px] font-bold opacity-20 uppercase tracking-widest">${new Date(note.id).toLocaleDateString()}</span>
+                                <button onclick="deleteNote(event, ${note.id})" class="p-2 opacity-20 hover:opacity-100 text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                            </div>
+                        `;
+                        container.appendChild(div);
+                });
+            } else {
+                document.getElementById('fab').classList.add('hidden');
+                // Ввод задачи
+                const inputDiv = document.createElement('div');
+                inputDiv.className = 'app-card p-4 rounded-3xl shadow-sm mb-4';
+                inputDiv.innerHTML = `<input type="text" placeholder="Добавить задачу..." class="w-full bg-transparent outline-none font-bold text-lg" onkeydown="addTask(event)">`;
+                container.appendChild(inputDiv);
+
+                tasks.forEach(task => {
+                    const div = document.createElement('div');
+                    div.className = 'app-card p-5 rounded-3xl flex items-center gap-4 shadow-sm';
+                    div.innerHTML = `
+                        <button onclick="toggleTask(${task.id})">
+                            <i data-lucide="${task.completed ? 'check-circle-2' : 'circle'}" class="w-6 h-6 ${task.completed ? 'app-accent' : 'opacity-20'}"></i>
+                        </button>
+                        <span class="font-bold flex-1 text-lg ${task.completed ? 'line-through opacity-20' : ''}">${task.text}</span>
+                        <button onclick="deleteTask(${task.id})" class="opacity-10 hover:opacity-100"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+                    `;
+                    container.appendChild(div);
+                });
+            }
+            lucide.createIcons();
+        }
+
+        // Логика заметок
+        function createNewNote() {
+            const id = Date.now();
+            notes.unshift({ id, title: '', content: '' });
+            save();
+            openEditor(id);
+        }
+
+        function openEditor(id) {
+            activeNoteId = id;
+            const note = notes.find(n => n.id === id);
+            document.getElementById('editor-title').value = note.title;
+            document.getElementById('editor-content').innerHTML = note.content;
+            document.getElementById('view-list').classList.add('hidden');
+            document.getElementById('view-editor').classList.remove('hidden');
+            document.getElementById('view-editor').classList.add('flex');
+        }
+
+        function closeEditor() {
+            const note = notes.find(n => n.id === activeNoteId);
+            note.title = document.getElementById('editor-title').value;
+            note.content = document.getElementById('editor-content').innerHTML;
+            save();
+            document.getElementById('view-editor').classList.add('hidden');
+            document.getElementById('view-list').classList.remove('hidden');
+            render();
+        }
+
+        function deleteNote(e, id) {
+            e.stopPropagation();
+            notes = notes.filter(n => n.id !== id);
+            save();
+            render();
+        }
+
+        // Логика задач
+        function addTask(e) {
+            if (e.key === 'Enter' && e.target.value.trim()) {
+                tasks.unshift({ id: Date.now(), text: e.target.value, completed: false });
+                e.target.value = '';
+                save();
+                render();
+            }
+        }
+
+        function toggleTask(id) {
+            const task = tasks.find(t => t.id === id);
+            task.completed = !task.completed;
+            save();
+            render();
+        }
+
+        function deleteTask(id) {
+            tasks = tasks.filter(t => t.id !== id);
+            save();
+            render();
+        }
+
+        // Интерфейс
+        function toggleDrawer(show) {
+            const drawer = document.getElementById('drawer');
+            const overlay = document.getElementById('drawer-overlay');
+            if (show) {
+                drawer.classList.remove('-translate-x-full');
+                overlay.classList.remove('opacity-0', 'pointer-events-none');
+            } else {
+                drawer.classList.add('-translate-x-full');
+                overlay.classList.add('opacity-0', 'pointer-events-none');
+            }
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.getElementById('nav-notes').classList.toggle('opacity-50', tab !== 'notes');
+            document.getElementById('nav-notes').classList.toggle('app-secondary', tab === 'notes');
+            document.getElementById('nav-tasks').classList.toggle('opacity-50', tab !== 'tasks');
+            document.getElementById('nav-tasks').classList.toggle('app-secondary', tab === 'tasks');
+            toggleDrawer(false);
+            render();
+        }
+
+        function setTheme(t) {
+            document.body.className = `theme-${t} font-sans overflow-hidden h-screen w-screen`;
+            localStorage.setItem('lumina_theme', t);
+        }
+
+        function tryTheme(t) {
+            if (isPro) {
+                setTheme(t);
+            } else {
+                toggleProModal(true);
+            }
+        }
+
+        function toggleProModal(show) {
+            document.getElementById('pro-modal').classList.toggle('hidden', !show);
+            document.getElementById('pro-modal').classList.toggle('flex', show);
+            if (show) toggleDrawer(false);
+        }
+
+        function save() {
+            localStorage.setItem('lumina_notes', JSON.stringify(notes));
+            localStorage.setItem('lumina_tasks', JSON.stringify(tasks));
+        }
+
+        // Запуск
+        window.onload = init;
+        const savedTheme = localStorage.getItem('lumina_theme');
+        if (savedTheme) setTheme(savedTheme);
+    </script>
+</body>
+</html>
